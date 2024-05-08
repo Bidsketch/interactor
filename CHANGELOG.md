@@ -1,4 +1,8 @@
-## 3.2.0 / Unreleased
+## 3.2.1 / 2024-05-09
+* [FEATURE] Add ability to halt interactor organizer chains via "halt!"
+* [FEATURE] Add "halted?" for tracking halted state of an interactor context
+
+## 3.2.0 / 2024-05-09
 * [BUGFIX] Raise failures from nested contexts [#170]
 
 ## 3.1.2 / 2019-12-29
