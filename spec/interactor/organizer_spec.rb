@@ -54,7 +54,7 @@ module Interactor
       end
     end
 
-    describe 'halting in a chain' do
+    describe "halting in a chain" do
       let(:instance) { organizer.new }
       let(:context) { double(:context) }
       let(:interactor2) { double(:interactor2) }
@@ -68,7 +68,7 @@ module Interactor
         }
       end
 
-      it 'halts and does not call the latter' do
+      it "halts and does not call the latter" do
         expect(interactor2).to receive(:call!).once.with(context).ordered
         expect(interactor3).to receive(:call!).once.with(context).ordered.and_raise(Halt)
         expect(interactor4).to_not receive(:call!)

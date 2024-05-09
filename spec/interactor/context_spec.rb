@@ -154,20 +154,36 @@ module Interactor
       let(:context) { Context.build(foo: "bar") }
 
       it "sets success to true" do
-        context.halt! rescue nil
+        begin
+          context.halt!
+        rescue
+          nil
+        end
         expect(context).to be_a_success
       end
 
       it "sets failure to false" do
-        context.halt! rescue nil
+        begin
+          context.halt!
+        rescue
+          nil
+        end
         expect(context).to_not be_a_failure
       end
 
       it "preserves failure" do
-        context.fail! rescue nil
+        begin
+          context.fail!
+        rescue
+          nil
+        end
 
         expect {
-          context.halt! rescue nil
+          begin
+            context.halt!
+          rescue
+            nil
+          end
         }.not_to change {
           context.failure?
         }
@@ -175,7 +191,11 @@ module Interactor
 
       it "sets halted to true" do
         expect {
-          context.halt! rescue nil
+          begin
+            context.halt!
+          rescue
+            nil
+          end
         }.to change {
           context.halted?
         }.from(false).to(true)
@@ -183,7 +203,11 @@ module Interactor
 
       it "preserves the context" do
         expect {
-          context.halt! rescue nil
+          begin
+            context.halt!
+          rescue
+            nil
+          end
         }.not_to change {
           context.foo
         }
@@ -191,7 +215,11 @@ module Interactor
 
       it "updates the context" do
         expect {
-          context.halt!(foo: "baz") rescue nil
+          begin
+            context.halt!(foo: "baz")
+          rescue
+            nil
+          end
         }.to change {
           context.foo
         }.from("bar").to("baz")
@@ -204,11 +232,9 @@ module Interactor
       end
 
       it "makes the context available from the failure" do
-        begin
-          context.halt!
-        rescue Halt => error
-          expect(error.context).to eq(context)
-        end
+        context.halt!
+      rescue Halt => error
+        expect(error.context).to eq(context)
       end
     end
 
