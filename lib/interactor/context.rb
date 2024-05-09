@@ -53,7 +53,7 @@ module Interactor
     #
     # Returns the Interactor::Context.
     def self.build(context = {})
-      self === context ? context : new(context)
+      (self === context) ? context : new(context)
     end
 
     # Public: Whether the Interactor::Context is successful. By default, a new
@@ -98,6 +98,24 @@ module Interactor
       @failure || false
     end
 
+    # Public: Whether the Interactor::Context was halted or not. By default, a new
+    # context is non-halted and only changes when explicitly halted.
+    #
+    # Examples
+    #
+    #
+    #   context = Interactor::Context.new
+    #   # => #<Interactor::Context>
+    #   context.halted?
+    #   # => false
+    #   context.halt!(foo: "baz")
+    #   # => Interactor::Halt: #<Interactor::Context foo="baz">
+    #
+    # Raises Interactor::Halt initialized with the Interactor::Context
+    def halted?
+      @halted || false
+    end
+
     # Public: Fail the Interactor::Context. Failing a context raises an error
     # that may be rescued by the calling interactor. The context is also flagged
     # as having failed.
@@ -124,6 +142,34 @@ module Interactor
       context.each { |key, value| self[key.to_sym] = value }
       @failure = true
       raise Failure, self
+    end
+
+    # Public: Halt the Interactor::Context. Halting a context allows stopping the
+    # context without failing it. It is often used in stopping Organizer chains
+    # without explicitly failing. The context is not flagged as having failed.
+    #
+    # Optionally the caller may provide a hash of key/value pairs to be merged
+    # into the context before halting.
+    #
+    # context - A Hash whose key/value pairs are merged into the existing
+    #           Interactor::Context instance. (default: {})
+    #
+    # Examples
+    #
+    #   context = Interactor::Context.new
+    #   # => #<Interactor::Context>
+    #   context.halt!
+    #   # => Interactor::Halt: #<Interactor::Context>
+    #   context.halt! rescue false
+    #   # => false
+    #   context.halt!(foo: "baz")
+    #   # => Interactor::Halt: #<Interactor::Context foo="baz">
+    #
+    # Raises Interactor::Halt initialized with the Interactor::Context.
+    def halt!(context = {})
+      context.each { |key, value| self[key.to_sym] = value }
+      @halted = true
+      raise Halt, self
     end
 
     # Internal: Track that an Interactor has been called. The "called!" method
@@ -153,7 +199,7 @@ module Interactor
     #
     # Returns true if rolled back successfully or false if already rolled back.
     def rollback!
-      return false if @rolled_back
+      return false if @rolled_back || halted?
       _called.reverse_each(&:rollback)
       @rolled_back = true
     end
