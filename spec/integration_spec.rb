@@ -1793,7 +1793,7 @@ describe "Integration" do
         end
 
         def call
-          raise Interactor::Halt, error: "foo"
+          context.halt!
         end
 
         def rollback
