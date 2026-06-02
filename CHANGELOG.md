@@ -1,3 +1,7 @@
+## 3.2.1 / 2024-05-09
+* [FEATURE] Add ability to halt interactor organizer chains via "halt!"
+* [FEATURE] Add "halted?" for tracking halted state of an interactor context
+
 ## 3.2.0 / 2025-07-10
 * [BUGFIX] Raise failures from nested contexts [#170]
 * [FEATURE] Add `ostruct` dependency to gemspec.

@@ -1774,4 +1774,51 @@ describe "Integration" do
       }.to raise_error("foo")
     end
   end
+
+  context "when a nested call halts" do
+    let(:interactor3) {
+      build_interactor do
+        around do |interactor|
+          context.steps << :around_before3
+          interactor.call
+          context.steps << :around_after3
+        end
+
+        before do
+          context.steps << :before3
+        end
+
+        after do
+          context.steps << :after3
+        end
+
+        def call
+          context.halt!
+        end
+
+        def rollback
+          context.steps << :rollback3
+        end
+      end
+    }
+
+    it "ends but does not rollback called interactors" do
+      expect {
+        begin
+          organizer.call(context)
+        rescue
+          nil
+        end
+      }.to change(context, :steps).from([]).to([
+        :around_before, :before,
+        :around_before2, :before2,
+        :around_before2a, :before2a, :call2a, :after2a, :around_after2a,
+        :around_before2b, :before2b, :call2b, :after2b, :around_after2b,
+        :around_before2c, :before2c, :call2c, :after2c, :around_after2c,
+        :after2, :around_after2,
+        :around_before3, :before3,
+        :after, :around_after
+      ])
+    end
+  end
 end
