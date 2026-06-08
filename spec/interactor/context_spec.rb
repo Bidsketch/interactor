@@ -144,11 +144,9 @@ module Interactor
       end
 
       it "makes the context available from the failure" do
-        begin
-          context.fail!
-        rescue Failure => error
-          expect(error.context).to eq(context)
-        end
+        context.fail!
+      rescue Failure => error
+        expect(error.context).to eq(context)
       end
     end
 
@@ -288,6 +286,181 @@ module Interactor
       end
     end
 
+    describe "dynamic attributes" do
+      let(:context) { Context.build }
+
+      it "sets and reads attributes via method syntax" do
+        context.foo = "bar"
+        expect(context.foo).to eq("bar")
+      end
+
+      it "returns nil for unset attributes" do
+        expect(context.missing_key).to be_nil
+      end
+
+      it "overwrites previously set attributes" do
+        context.foo = "bar"
+        context.foo = "baz"
+        expect(context.foo).to eq("baz")
+      end
+
+      it "responds to setter methods" do
+        expect(context.respond_to?(:foo=)).to eq(true)
+      end
+
+      it "responds to getter methods only after the key is set" do
+        expect(context.respond_to?(:foo)).to eq(false)
+        context.foo = "bar"
+        expect(context.respond_to?(:foo)).to eq(true)
+      end
+
+      it "normalises string keys to symbols" do
+        context["foo"] = "bar"
+        expect(context.foo).to eq("bar")
+        expect(context[:foo]).to eq("bar")
+      end
+    end
+
+    describe "#[] and #[]=" do
+      let(:context) { Context.build }
+
+      it "reads and writes with symbol keys" do
+        context[:foo] = "bar"
+        expect(context[:foo]).to eq("bar")
+      end
+
+      it "normalises string keys on write" do
+        context["foo"] = "bar"
+        expect(context[:foo]).to eq("bar")
+      end
+
+      it "normalises string keys on read" do
+        context[:foo] = "bar"
+        expect(context["foo"]).to eq("bar")
+      end
+    end
+
+    describe "#to_h" do
+      it "returns user-set attributes as a hash" do
+        context = Context.build(foo: "bar", baz: 42)
+        expect(context.to_h).to eq(foo: "bar", baz: 42)
+      end
+
+      it "does not include internal state flags" do
+        context = Context.build(foo: "bar")
+        begin
+          context.fail!
+        rescue
+          nil
+        end
+        hash = context.to_h
+        expect(hash.keys).not_to include(:failure, :success, :halted)
+      end
+
+      it "returns a copy that does not affect the context" do
+        context = Context.build(foo: "bar")
+        hash = context.to_h
+        hash[:foo] = "mutated"
+        expect(context.foo).to eq("bar")
+      end
+    end
+
+    describe "#==" do
+      it "is equal to another context with the same attributes" do
+        context1 = Context.build(foo: "bar")
+        context2 = Context.build(foo: "bar")
+        expect(context1).to eq(context2)
+      end
+
+      it "is not equal to a context with different attributes" do
+        context1 = Context.build(foo: "bar")
+        context2 = Context.build(foo: "baz")
+        expect(context1).not_to eq(context2)
+      end
+
+      it "is not equal to a plain hash" do
+        context = Context.build(foo: "bar")
+        expect(context).not_to eq(foo: "bar")
+      end
+    end
+
+    describe "#eql? and #hash" do
+      it "two contexts with the same attributes are eql?" do
+        context1 = Context.build(foo: "bar")
+        context2 = Context.build(foo: "bar")
+        expect(context1.eql?(context2)).to eq(true)
+      end
+
+      it "two contexts with different attributes are not eql?" do
+        context1 = Context.build(foo: "bar")
+        context2 = Context.build(foo: "baz")
+        expect(context1.eql?(context2)).to eq(false)
+      end
+
+      it "equal contexts have the same hash value" do
+        context1 = Context.build(foo: "bar")
+        context2 = Context.build(foo: "bar")
+        expect(context1.hash).to eq(context2.hash)
+      end
+
+      it "can be used as a Hash key with value semantics" do
+        context1 = Context.build(foo: "bar")
+        context2 = Context.build(foo: "bar")
+        h = {context1 => :found}
+        expect(h[context2]).to eq(:found)
+      end
+    end
+
+    describe "#dup (initialize_copy)" do
+      let(:instance1) { double(:instance1) }
+      let(:instance2) { double(:instance2) }
+
+      it "dups the @table so attribute mutations are isolated" do
+        original = Context.build(foo: "bar")
+        copy = original.dup
+        copy.foo = "baz"
+        expect(original.foo).to eq("bar")
+      end
+
+      it "dups @called so rollback lists are independent" do
+        original = Context.build
+        original.called!(instance1)
+        copy = original.dup
+        copy.called!(instance2)
+        expect(original._called).to eq([instance1])
+        expect(copy._called).to eq([instance1, instance2])
+      end
+
+      it "resets failure state so a dup of a failed context starts fresh" do
+        original = Context.build(foo: "bar")
+        begin
+          original.fail!
+        rescue
+          nil
+        end
+        copy = original.dup
+        expect(copy.failure?).to eq(false)
+        expect(copy.success?).to eq(true)
+      end
+
+      it "resets halted state so a dup of a halted context starts fresh" do
+        original = Context.build(foo: "bar")
+        begin
+          original.halt!
+        rescue
+          nil
+        end
+        copy = original.dup
+        expect(copy.halted?).to eq(false)
+      end
+    end
+
+    describe "OpenStruct removal" do
+      it "does not inherit from OpenStruct" do
+        expect(Context.superclass).to eq(Object)
+      end
+    end
+
     describe "#deconstruct_keys" do
       let(:context) { Context.build(foo: :bar) }
 
@@ -318,7 +491,7 @@ module Interactor
         end
 
         it "supports rightward assignment for halted:" do
-          context => { halted: }
+          context => {halted:}
           expect(halted).to be(true)
         end
       end
