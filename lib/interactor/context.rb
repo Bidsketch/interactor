@@ -1,5 +1,3 @@
-require "ostruct"
-
 module Interactor
   # Public: The object for tracking state of an Interactor's invocation. The
   # context is used to initialize the interactor with the information required
@@ -28,7 +26,7 @@ module Interactor
   #   # => "baz"
   #   context
   #   # => #<Interactor::Context foo="baz" hello="world">
-  class Context < OpenStruct
+  class Context
     # Internal: Initialize an Interactor::Context or preserve an existing one.
     # If the argument given is an Interactor::Context, the argument is returned.
     # Otherwise, a new Interactor::Context is initialized from the provided
@@ -57,6 +55,58 @@ module Interactor
         context
       else
         new(context)
+      end
+    end
+
+    def initialize(context = {})
+      @table = {}
+      context&.each { |key, value| self[key] = value }
+    end
+
+    # Public: Read a context attribute by key.
+    def [](key)
+      @table[key.to_sym]
+    end
+
+    # Public: Write a context attribute by key, normalising to symbol.
+    def []=(key, value)
+      @table[key.to_sym] = value
+    end
+
+    # Public: Return all user-set attributes as a Hash (excludes internal state).
+    def to_h
+      @table.dup
+    end
+
+    def ==(other)
+      other.is_a?(Context) && @table == other.send(:table)
+    end
+
+    def eql?(other)
+      other.is_a?(Context) && @table.eql?(other.send(:table))
+    end
+
+    def hash
+      @table.hash
+    end
+
+    def inspect
+      pairs = @table.map { |k, v| "#{k}=#{v.inspect}" }
+      "#<#{self.class}#{" #{pairs.join(", ")}" unless pairs.empty?}>"
+    end
+
+    def respond_to_missing?(method_name, include_private = false)
+      method_name.to_s.end_with?("=") || @table.key?(method_name.to_sym) || super
+    end
+
+    # Dynamic getter/setter for arbitrary context attributes.
+    # Setters end with "="; getters return nil for unset keys.
+    def method_missing(method_name, *args)
+      name = method_name.to_s
+      if name.end_with?("=")
+        @table[name.delete_suffix("=").to_sym] = args.first
+      else
+        @table[method_name.to_sym]
       end
     end
 
@@ -143,7 +193,7 @@ module Interactor
     #
     # Raises Interactor::Failure initialized with the Interactor::Context.
     def fail!(context = {})
-      context.each { |key, value| self[key.to_sym] = value }
+      context.each { |key, value| self[key] = value }
       @failure = true
       raise Failure, self
     end
@@ -171,7 +221,7 @@ module Interactor
     #
     # Raises Interactor::Halt initialized with the Interactor::Context.
     def halt!(context = {})
-      context.each { |key, value| self[key.to_sym] = value }
+      context.each { |key, value| self[key] = value }
       @halted = true
       raise Halt, self
     end
@@ -204,6 +254,7 @@ module Interactor
     # Returns true if rolled back successfully or false if already rolled back.
     def rollback!
       return false if @rolled_back || halted?
+
       _called.reverse_each(&:rollback)
       @rolled_back = true
     end
@@ -250,12 +301,25 @@ module Interactor
     #   end
     #
     # Returns the context as a hash, including success, failure, and halted
-    def deconstruct_keys(keys)
-      to_h.merge(
+    def deconstruct_keys(_keys)
+      @table.merge(
         success: success?,
         failure: failure?,
         halted: halted?
       )
+    end
+
+    private
+
+    attr_reader :table
+
+    def initialize_copy(orig)
+      super
+      @table = orig.send(:table).dup
+      @called = orig._called.dup
+      @failure = nil
+      @halted = nil
+      @rolled_back = nil
     end
   end
 end
