@@ -291,7 +291,7 @@ module Interactor
     describe "#deconstruct_keys" do
       let(:context) { Context.build(foo: :bar) }
 
-      let(:deconstructed) { context.deconstruct_keys([:foo, :success, :failure]) }
+      let(:deconstructed) { context.deconstruct_keys([:foo, :success, :failure, :halted]) }
 
       it "deconstructs as hash pattern" do
         expect(deconstructed[:foo]).to eq(:bar)
@@ -300,6 +300,27 @@ module Interactor
       it "includes success and failure" do
         expect(deconstructed[:success]).to eq(true)
         expect(deconstructed[:failure]).to eq(false)
+      end
+
+      it "includes halted as false by default" do
+        expect(deconstructed[:halted]).to eq(false)
+      end
+
+      context "when halted" do
+        before do
+          context.halt!
+        rescue Halt
+          nil
+        end
+
+        it "includes halted as true" do
+          expect(context.deconstruct_keys(nil)[:halted]).to eq(true)
+        end
+
+        it "supports rightward assignment for halted:" do
+          context => { halted: }
+          expect(halted).to be(true)
+        end
       end
     end
   end
