@@ -80,7 +80,7 @@ context.success? # => false
 
 Normally, however, these exceptions are not seen. In the recommended usage, the controller invokes the interactor using the class method `call`, then checks the `success?` method of the context.
 
-This works because the `call` class method swallows exceptions.  When unit testing an interactor, if calling custom business logic methods directly and bypassing `call`, be aware that `fail!` will generate such exceptions.
+This works because the `call` class method swallows `Interactor::Failure` exceptions.  When unit testing an interactor, if calling custom business logic methods directly and bypassing `call`, be aware that `fail!` will generate such exceptions.
 
 See *Interactors in the Controller*, below, for the recommended usage of `call` and `success?`.
 
@@ -253,7 +253,7 @@ class SessionsController < ApplicationController
       redirect_to user
     else
       flash.now[:message] = "Please try again."
-      render :new
+      render :new, status: :unprocessable_entity
     end
   end
 
@@ -277,7 +277,7 @@ class SessionsController < ApplicationController
       redirect_to result.user
     else
       flash.now[:message] = t(result.message)
-      render :new
+      render :new, status: :unprocessable_entity
     end
   end
 

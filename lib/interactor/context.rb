@@ -53,7 +53,11 @@ module Interactor
     #
     # Returns the Interactor::Context.
     def self.build(context = {})
-      (self === context) ? context : new(context)
+      if self === context
+        context
+      else
+        new(context)
+      end
     end
 
     # Public: Whether the Interactor::Context is successful. By default, a new
@@ -222,6 +226,36 @@ module Interactor
     # Returns an Array of Interactor instances or an empty Array.
     def _called
       @called ||= []
+    end
+
+    # Internal: Support for ruby 3.0 pattern matching
+    #
+    # Examples
+    #
+    #   context = MyInteractor.call(foo: "bar")
+    #
+    #   # => #<Interactor::Context foo="bar">
+    #   context => { foo: }
+    #   foo == "bar"
+    #   # => true
+    #
+    #
+    #   case context
+    #   in success: true, result: { first:, second: }
+    #     do_stuff(first, second)
+    #   in failure: true, error_message:
+    #     log_error(message: error_message)
+    #   in halted: true
+    #     handle_early_exit
+    #   end
+    #
+    # Returns the context as a hash, including success, failure, and halted
+    def deconstruct_keys(keys)
+      to_h.merge(
+        success: success?,
+        failure: failure?,
+        halted: halted?
+      )
     end
   end
 end
