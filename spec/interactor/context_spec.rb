@@ -144,11 +144,9 @@ module Interactor
       end
 
       it "makes the context available from the failure" do
-        begin
-          context.fail!
-        rescue Failure => error
-          expect(error.context).to eq(context)
-        end
+        context.fail!
+      rescue Failure => error
+        expect(error.context).to eq(context)
       end
     end
 
@@ -435,7 +433,11 @@ module Interactor
 
       it "resets failure state so a dup of a failed context starts fresh" do
         original = Context.build(foo: "bar")
-        original.fail! rescue nil
+        begin
+          original.fail!
+        rescue
+          nil
+        end
         copy = original.dup
         expect(copy.failure?).to eq(false)
         expect(copy.success?).to eq(true)
@@ -443,7 +445,11 @@ module Interactor
 
       it "resets halted state so a dup of a halted context starts fresh" do
         original = Context.build(foo: "bar")
-        original.halt! rescue nil
+        begin
+          original.halt!
+        rescue
+          nil
+        end
         copy = original.dup
         expect(copy.halted?).to eq(false)
       end
@@ -485,7 +491,7 @@ module Interactor
         end
 
         it "supports rightward assignment for halted:" do
-          context => { halted: }
+          context => {halted:}
           expect(halted).to be(true)
         end
       end
