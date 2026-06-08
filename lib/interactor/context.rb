@@ -245,13 +245,16 @@ module Interactor
     #     do_stuff(first, second)
     #   in failure: true, error_message:
     #     log_error(message: error_message)
+    #   in halted: true
+    #     handle_early_exit
     #   end
     #
-    # Returns the context as a hash, including success and failure
+    # Returns the context as a hash, including success, failure, and halted
     def deconstruct_keys(keys)
       to_h.merge(
         success: success?,
-        failure: failure?
+        failure: failure?,
+        halted: halted?
       )
     end
   end
