@@ -97,6 +97,11 @@ module Interactor
       "#<#{self.class}#{" #{pairs.join(", ")}" unless pairs.empty?}>"
     end
 
+    # OpenStruct aliased to_s to inspect; preserve that so Interactor::Failure
+    # messages (Exception#message calls context.to_s) stay readable rather than
+    # falling back to Object#to_s (#<Interactor::Context:0x...>).
+    alias_method :to_s, :inspect
+
     def respond_to_missing?(method_name, include_private = false)
       method_name.to_s.end_with?("=") || @table.key?(method_name.to_sym) || super
     end

@@ -480,6 +480,21 @@ module Interactor
       end
     end
 
+    describe "#to_s" do
+      it "matches #inspect so attribute info is not lost" do
+        context = Context.build(foo: "bar")
+        expect(context.to_s).to eq(context.inspect)
+        expect(context.to_s).to include('foo="bar"')
+      end
+
+      it "keeps Interactor::Failure messages readable" do
+        context = Context.build(foo: "bar")
+        context.fail!
+      rescue Failure => error
+        expect(error.message).to include('foo="bar"')
+      end
+    end
+
     describe "#deconstruct_keys" do
       let(:context) { Context.build(foo: :bar) }
 
