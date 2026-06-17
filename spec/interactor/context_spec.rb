@@ -459,6 +459,25 @@ module Interactor
       it "does not inherit from OpenStruct" do
         expect(Context.superclass).to eq(Object)
       end
+
+      # Regression guard for the real-world failure mode: in the application,
+      # ActiveSupport adds Object#to_json and ~32 endpoints store a rendered
+      # payload as context.to_json then read it back. A plain method_missing
+      # implementation lets that read fall through to the inherited method.
+      # ActiveSupport is not loaded in this gem's own suite, so we reproduce the
+      # same shadowing with Kernel#display, which exists on every Object here;
+      # the application-level to_json case is covered by the Docsketch suite.
+      it "returns the stored value for a key shadowing an inherited method" do
+        context = Context.build
+        context.display = "stored-payload"
+        expect(context.display).to eq("stored-payload")
+      end
+
+      it "preserves the shadowing override across dup" do
+        context = Context.build
+        context.display = "stored-payload"
+        expect(context.dup.display).to eq("stored-payload")
+      end
     end
 
     describe "#deconstruct_keys" do

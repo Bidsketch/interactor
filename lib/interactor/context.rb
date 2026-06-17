@@ -70,7 +70,9 @@ module Interactor
 
     # Public: Write a context attribute by key, normalising to symbol.
     def []=(key, value)
-      @table[key.to_sym] = value
+      key = key.to_sym
+      define_accessor(key) unless singleton_class.method_defined?(key, false)
+      @table[key] = value
     end
 
     # Public: Return all user-set attributes as a Hash (excludes internal state).
@@ -104,7 +106,7 @@ module Interactor
     def method_missing(method_name, *args)
       name = method_name.to_s
       if name.end_with?("=")
-        @table[name.delete_suffix("=").to_sym] = args.first
+        self[name.delete_suffix("=").to_sym] = args.first
       else
         @table[method_name.to_sym]
       end
@@ -313,9 +315,22 @@ module Interactor
 
     attr_reader :table
 
+    # Mirror OpenStruct: on the first write of a key, define a getter (and
+    # setter) on this instance's singleton class so the getter outranks any
+    # method inherited from Object - notably ActiveSupport's Object#to_json,
+    # which application code relies on reading back as a stored context value.
+    # The `false` argument to method_defined? (in #[]=) stops the lookup walking
+    # up to Object; without it, names like :to_json would always look "defined"
+    # and the singleton override would never be installed.
+    def define_accessor(key)
+      define_singleton_method(key) { @table[key] }
+      define_singleton_method("#{key}=") { |value| @table[key] = value }
+    end
+
     def initialize_copy(orig)
       super
       @table = orig.send(:table).dup
+      @table.each_key { |key| define_accessor(key) }
       @called = orig._called.dup
       @failure = nil
       @halted = nil
