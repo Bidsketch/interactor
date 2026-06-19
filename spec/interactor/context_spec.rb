@@ -544,6 +544,50 @@ module Interactor
       end
     end
 
+    describe "#dig" do
+      it "reads a top-level attribute" do
+        context = Context.build(foo: "bar")
+        expect(context.dig(:foo)).to eq("bar")
+      end
+
+      it "digs into nested values" do
+        context = Context.build(foo: {a: {b: 1}})
+        expect(context.dig(:foo, :a, :b)).to eq(1)
+      end
+
+      it "normalises a string first key" do
+        context = Context.build(foo: {a: 1})
+        expect(context.dig("foo", :a)).to eq(1)
+      end
+
+      it "returns nil for a missing key" do
+        expect(Context.build.dig(:missing, :nope)).to be_nil
+      end
+    end
+
+    describe "Marshal round-trip" do
+      it "dumps and loads an attribute-bearing context" do
+        context = Context.build(foo: "bar", count: 3)
+        restored = Marshal.load(Marshal.dump(context))
+        expect(restored).to eq(context)
+        expect(restored.foo).to eq("bar")
+      end
+
+      it "rebuilds accessors for shadowing keys after load" do
+        context = Context.build
+        context.display = "stored-payload"
+        restored = Marshal.load(Marshal.dump(context))
+        expect(restored.display).to eq("stored-payload")
+      end
+
+      it "starts a restored context in a fresh, successful state" do
+        context = Context.build(foo: "bar")
+        restored = Marshal.load(Marshal.dump(context))
+        expect(restored.success?).to eq(true)
+        expect(restored._called).to eq([])
+      end
+    end
+
     describe "#to_s" do
       it "matches #inspect so attribute info is not lost" do
         context = Context.build(foo: "bar")

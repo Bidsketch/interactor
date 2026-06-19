@@ -106,6 +106,12 @@ module Interactor
       @table.dup
     end
 
+    # Public: Extract a nested value, mirroring OpenStruct#dig (and Hash#dig).
+    # The first key is normalised to a symbol to match attribute storage.
+    def dig(key, *rest)
+      @table.dig(key.to_sym, *rest)
+    end
+
     def ==(other)
       other.is_a?(Context) && @table == other.instance_variable_get(:@table)
     end
@@ -124,6 +130,20 @@ module Interactor
     def freeze
       @table.freeze
       super
+    end
+
+    # Public: Serialize only the attribute table. Because set keys define
+    # singleton methods, the default Marshal path raises "singleton can't be
+    # dumped"; dumping just @table keeps contexts marshallable (e.g. cached or
+    # enqueued) and rebuilds accessors on load. Transient state (called list,
+    # failure/halted flags) is intentionally not preserved.
+    def marshal_dump
+      @table
+    end
+
+    def marshal_load(table)
+      @table = table
+      rebuild_accessors
     end
 
     def inspect
@@ -375,10 +395,17 @@ module Interactor
       define_singleton_method("#{key}=") { |value| @table[key] = value }
     end
 
+    # Install singleton accessors for every stored key that needs one. Used
+    # after @table is replaced wholesale (dup/clone, Marshal load) rather than
+    # built up key-by-key through #[]=.
+    def rebuild_accessors
+      @table.each_key { |key| define_accessor(key) if define_accessor?(key) }
+    end
+
     def initialize_copy(orig)
       super
       @table = orig.to_h
-      @table.each_key { |key| define_accessor(key) if define_accessor?(key) }
+      rebuild_accessors
       @called = orig._called.dup
       @failure = nil
       @halted = nil
