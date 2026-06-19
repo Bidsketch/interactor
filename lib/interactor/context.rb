@@ -1,3 +1,5 @@
+require "set"
+
 module Interactor
   # Public: The object for tracking state of an Interactor's invocation. The
   # context is used to initialize the interactor with the information required
@@ -9,6 +11,11 @@ module Interactor
   # for the purpose of rollback.
   #
   # The context may be manipulated using arbitrary getter and setter methods.
+  #
+  # A context is not safe for concurrent writes: the first write of a key may
+  # define a singleton accessor (see RESERVED_NAMES), which mutates the
+  # instance's singleton class. Share a context across threads for reads only,
+  # or guard writes externally.
   #
   # Examples
   #
@@ -27,6 +34,25 @@ module Interactor
   #   context
   #   # => #<Interactor::Context foo="baz" hello="world">
   class Context
+    # Internal: Method names the context relies on for its own behaviour (its
+    # public/internal API plus the core object protocol it calls). A context key
+    # matching one of these is stored in @table and stays reachable through #[]
+    # and #to_h, but is never installed as a singleton accessor - so user data
+    # can never silently override a method the class itself depends on.
+    #
+    # Names added by *other* libraries (e.g. ActiveSupport's Object#to_json) are
+    # intentionally absent: those are shadowed by a singleton accessor so a
+    # stored value reads back, which is the entire reason accessors exist.
+    RESERVED_NAMES = Set[
+      :[], :[]=, :==, :eql?, :equal?, :hash, :dig, :dup, :clone, :freeze,
+      :frozen?, :to_h, :to_s, :inspect, :class, :is_a?, :kind_of?, :instance_of?,
+      :nil?, :send, :__send__, :singleton_class, :define_singleton_method,
+      :instance_variable_get, :instance_variable_set, :method, :methods,
+      :respond_to?, :respond_to_missing?, :method_missing, :object_id,
+      :marshal_dump, :marshal_load, :deconstruct_keys, :success?, :failure?,
+      :halted?, :fail!, :halt!, :called!, :rollback!, :_called
+    ].freeze
+
     # Internal: Initialize an Interactor::Context or preserve an existing one.
     # If the argument given is an Interactor::Context, the argument is returned.
     # Otherwise, a new Interactor::Context is initialized from the provided
@@ -71,7 +97,7 @@ module Interactor
     # Public: Write a context attribute by key, normalising to symbol.
     def []=(key, value)
       key = key.to_sym
-      define_accessor(key) unless singleton_class.method_defined?(key, false)
+      define_accessor(key) if define_accessor?(key)
       @table[key] = value
     end
 
@@ -81,15 +107,23 @@ module Interactor
     end
 
     def ==(other)
-      other.is_a?(Context) && @table == other.send(:table)
+      other.is_a?(Context) && @table == other.instance_variable_get(:@table)
     end
 
     def eql?(other)
-      other.is_a?(Context) && @table.eql?(other.send(:table))
+      other.is_a?(Context) && @table.eql?(other.instance_variable_get(:@table))
     end
 
     def hash
       @table.hash
+    end
+
+    # Public: Freeze the context. Freezes the backing table too so that, as with
+    # OpenStruct, subsequent writes raise FrozenError rather than silently
+    # succeeding.
+    def freeze
+      @table.freeze
+      super
     end
 
     def inspect
@@ -318,15 +352,24 @@ module Interactor
 
     private
 
-    attr_reader :table
+    # Whether a singleton accessor should be installed for the given key.
+    #
+    # A plain key (one that does not shadow an existing method) is served by
+    # #method_missing, so no accessor is needed - keeping ordinary contexts free
+    # of per-key singleton methods. An accessor is installed only when the key
+    # would otherwise be intercepted by an inherited method (e.g. ActiveSupport's
+    # Object#to_json), so the stored value reads back. Reserved names and keys
+    # already backed by an accessor are skipped.
+    def define_accessor?(key)
+      return false if RESERVED_NAMES.include?(key)
+      return false if singleton_class.method_defined?(key, false)
 
-    # Mirror OpenStruct: on the first write of a key, define a getter (and
-    # setter) on this instance's singleton class so the getter outranks any
-    # method inherited from Object - notably ActiveSupport's Object#to_json,
-    # which application code relies on reading back as a stored context value.
-    # The `false` argument to method_defined? (in #[]=) stops the lookup walking
-    # up to Object; without it, names like :to_json would always look "defined"
-    # and the singleton override would never be installed.
+      respond_to?(key, true)
+    end
+
+    # Define a getter (and setter) on this instance's singleton class so they
+    # outrank the inherited method the key shadows. See #define_accessor? for
+    # when this is invoked.
     def define_accessor(key)
       define_singleton_method(key) { @table[key] }
       define_singleton_method("#{key}=") { |value| @table[key] = value }
@@ -334,8 +377,8 @@ module Interactor
 
     def initialize_copy(orig)
       super
-      @table = orig.send(:table).dup
-      @table.each_key { |key| define_accessor(key) }
+      @table = orig.to_h
+      @table.each_key { |key| define_accessor(key) if define_accessor?(key) }
       @called = orig._called.dup
       @failure = nil
       @halted = nil

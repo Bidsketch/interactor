@@ -12,7 +12,7 @@ module Interactor
         context = Context.build
 
         expect(context).to be_a(Context)
-        expect(context.send(:table)).to eq({})
+        expect(context.to_h).to eq({})
       end
 
       it "doesn't affect the original hash" do
@@ -382,6 +382,12 @@ module Interactor
         context = Context.build(foo: "bar")
         expect(context).not_to eq(foo: "bar")
       end
+
+      it "is equal regardless of attribute insertion order" do
+        context1 = Context.build(foo: "bar", baz: "qux")
+        context2 = Context.build(baz: "qux", foo: "bar")
+        expect(context1).to eq(context2)
+      end
     end
 
     describe "#eql? and #hash" do
@@ -477,6 +483,64 @@ module Interactor
         context = Context.build
         context.display = "stored-payload"
         expect(context.dup.display).to eq("stored-payload")
+      end
+
+      it "does not install a singleton accessor for a plain key" do
+        context = Context.build
+        context.foo = "bar"
+        expect(context.singleton_methods).not_to include(:foo)
+        expect(context.foo).to eq("bar")
+      end
+
+      it "installs a singleton accessor only for keys shadowing a method" do
+        context = Context.build
+        context.display = "stored-payload"
+        expect(context.singleton_methods).to include(:display)
+      end
+    end
+
+    describe "reserved names" do
+      it "stores a reserved key without overriding the method" do
+        context = Context.build
+        context[:hash] = "stored"
+        # #hash still returns the real Integer identity hash, not "stored",
+        # while the value remains reachable through #[].
+        expect(context.hash).to eq({hash: "stored"}.hash)
+        expect(context[:hash]).to eq("stored")
+      end
+
+      it "keeps #to_h working when a :to_h key is stored" do
+        context = Context.build(to_h: "stored", foo: "bar")
+        expect(context.to_h).to eq(to_h: "stored", foo: "bar")
+        expect(context[:to_h]).to eq("stored")
+      end
+
+      it "keeps equality working when a reserved key is stored" do
+        context1 = Context.build(hash: "x")
+        context2 = Context.build(hash: "x")
+        expect(context1).to eq(context2)
+      end
+
+      # Guards against silent divergence: if a new public method is added to
+      # Context without reserving its name, a user key of the same name would
+      # shadow it. This fails loudly instead.
+      it "reserves every method the class defines" do
+        own_methods = Context.instance_methods(false)
+        unreserved = own_methods.reject { |name| Context::RESERVED_NAMES.include?(name) }
+        expect(unreserved).to eq([])
+      end
+    end
+
+    describe "#freeze" do
+      it "raises when writing to a frozen context" do
+        context = Context.build(foo: "bar")
+        context.freeze
+        expect { context.baz = "qux" }.to raise_error(FrozenError)
+      end
+
+      it "reports itself as frozen" do
+        context = Context.build.freeze
+        expect(context).to be_frozen
       end
     end
 
