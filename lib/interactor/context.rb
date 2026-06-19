@@ -101,8 +101,12 @@ module Interactor
       @table[key] = value
     end
 
-    # Public: Return all user-set attributes as a Hash (excludes internal state).
-    def to_h
+    # Public: Return all user-set attributes as a Hash (excludes internal
+    # state). Mirrors OpenStruct#to_h: with a block, each key/value pair is
+    # transformed; without one, a shallow copy is returned.
+    def to_h(&block)
+      return @table.to_h(&block) if block
+
       @table.dup
     end
 
@@ -167,6 +171,12 @@ module Interactor
       if name.end_with?("=")
         self[name.delete_suffix("=").to_sym] = args.first
       else
+        # Mirror OpenStruct: a getter takes no arguments, so flag caller bugs
+        # rather than silently ignoring them.
+        unless args.empty?
+          raise ArgumentError, "wrong number of arguments (given #{args.size}, expected 0)"
+        end
+
         @table[method_name.to_sym]
       end
     end

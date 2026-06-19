@@ -298,6 +298,11 @@ module Interactor
         expect(context.missing_key).to be_nil
       end
 
+      it "raises ArgumentError when a getter is called with arguments" do
+        context.foo = "bar"
+        expect { context.foo(1) }.to raise_error(ArgumentError)
+      end
+
       it "overwrites previously set attributes" do
         context.foo = "bar"
         context.foo = "baz"
@@ -362,6 +367,12 @@ module Interactor
         hash = context.to_h
         hash[:foo] = "mutated"
         expect(context.foo).to eq("bar")
+      end
+
+      it "transforms pairs when given a block" do
+        context = Context.build(foo: "bar")
+        result = context.to_h { |key, value| [key.to_s, value.upcase] }
+        expect(result).to eq("foo" => "BAR")
       end
     end
 
