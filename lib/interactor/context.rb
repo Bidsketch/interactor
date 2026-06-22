@@ -34,25 +34,6 @@ module Interactor
   #   context
   #   # => #<Interactor::Context foo="baz" hello="world">
   class Context
-    # Internal: Method names the context relies on for its own behaviour (its
-    # public/internal API plus the core object protocol it calls). A context key
-    # matching one of these is stored in @table and stays reachable through #[]
-    # and #to_h, but is never installed as a singleton accessor - so user data
-    # can never silently override a method the class itself depends on.
-    #
-    # Names added by *other* libraries (e.g. ActiveSupport's Object#to_json) are
-    # intentionally absent: those are shadowed by a singleton accessor so a
-    # stored value reads back, which is the entire reason accessors exist.
-    RESERVED_NAMES = Set[
-      :[], :[]=, :==, :eql?, :equal?, :hash, :dig, :dup, :clone, :freeze,
-      :frozen?, :to_h, :to_s, :inspect, :class, :is_a?, :kind_of?, :instance_of?,
-      :nil?, :send, :__send__, :singleton_class, :define_singleton_method,
-      :instance_variable_get, :instance_variable_set, :method, :methods,
-      :respond_to?, :respond_to_missing?, :method_missing, :object_id,
-      :marshal_dump, :marshal_load, :deconstruct_keys, :success?, :failure?,
-      :halted?, :fail!, :halt!, :called!, :rollback!, :_called
-    ].freeze
-
     # Internal: Initialize an Interactor::Context or preserve an existing one.
     # If the argument given is an Interactor::Context, the argument is returned.
     # Otherwise, a new Interactor::Context is initialized from the provided
@@ -117,11 +98,11 @@ module Interactor
     end
 
     def ==(other)
-      other.is_a?(Context) && @table == other.instance_variable_get(:@table)
+      other.is_a?(Context) && @table == other.table
     end
 
     def eql?(other)
-      other.is_a?(Context) && @table.eql?(other.instance_variable_get(:@table))
+      other.is_a?(Context) && @table.eql?(other.table)
     end
 
     def hash
@@ -380,6 +361,12 @@ module Interactor
       )
     end
 
+    protected
+
+    # Readable by sibling contexts only, so #== / #eql? can compare tables
+    # without reaching into another instance's @table by name.
+    attr_reader :table
+
     private
 
     # Whether a singleton accessor should be installed for the given key.
@@ -397,12 +384,12 @@ module Interactor
       respond_to?(key, true)
     end
 
-    # Define a getter (and setter) on this instance's singleton class so they
-    # outrank the inherited method the key shadows. See #define_accessor? for
-    # when this is invoked.
+    # Define a getter on this instance's singleton class so it outranks the
+    # inherited method the key shadows. Only the reader needs overriding: setter
+    # names end in "=", which no inherited method does, so writes always route
+    # through #method_missing to #[]=. See #define_accessor? for when this runs.
     def define_accessor(key)
       define_singleton_method(key) { @table[key] }
-      define_singleton_method("#{key}=") { |value| @table[key] = value }
     end
 
     # Install singleton accessors for every stored key that needs one. Used
@@ -421,5 +408,27 @@ module Interactor
       @halted = nil
       @rolled_back = nil
     end
+
+    # Internal: Inherited Object/Kernel methods the context itself calls and
+    # must never let a key shadow. Only this protocol half needs hand-listing -
+    # it lives on Object, not here; the class's own methods are folded in by
+    # RESERVED_NAMES below.
+    CORE_PROTOCOL = %i[
+      dup clone frozen? class is_a? kind_of? instance_of? nil?
+      send __send__ singleton_class define_singleton_method
+      instance_variable_get instance_variable_set method methods
+      respond_to? object_id equal?
+    ].freeze
+
+    # Internal: Method names a context key must never shadow with a singleton
+    # accessor. Derived from the class's own API (so adding or renaming a method
+    # can't drift out of sync with this list) plus the inherited protocol above.
+    # Such keys are still stored in @table and reachable via #[]/#to_h. Names
+    # from *other* libraries (e.g. ActiveSupport's Object#to_json) are absent on
+    # purpose: those are shadowed so a stored value reads back, which is the
+    # entire reason accessors exist.
+    RESERVED_NAMES = (
+      instance_methods(false) + private_instance_methods(false) + CORE_PROTOCOL
+    ).to_set.freeze
   end
 end
