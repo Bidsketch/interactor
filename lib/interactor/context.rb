@@ -377,11 +377,24 @@ module Interactor
     # would otherwise be intercepted by an inherited method (e.g. ActiveSupport's
     # Object#to_json), so the stored value reads back. Reserved names and keys
     # already backed by an accessor are skipped.
+    #
+    # The collision test reads the class's real method table rather than
+    # #respond_to?, which #respond_to_missing? would report true for any stored
+    # key, and avoids touching #singleton_class until we know shadowing is
+    # needed - materialising a per-instance singleton class for an ordinary key
+    # would give every context its own class and make attribute reads
+    # megamorphic under YJIT.
     def define_accessor?(key)
       return false if RESERVED_NAMES.include?(key)
-      return false if singleton_class.method_defined?(key, false)
+      return false unless shadows_inherited_method?(key)
 
-      respond_to?(key, true)
+      !singleton_class.method_defined?(key, false)
+    end
+
+    # Whether a real (non-method_missing) method named key is inherited, so a
+    # plain getter would dispatch to it instead of the stored value.
+    def shadows_inherited_method?(key)
+      self.class.method_defined?(key) || self.class.private_method_defined?(key)
     end
 
     # Define a getter on this instance's singleton class so it outranks the
