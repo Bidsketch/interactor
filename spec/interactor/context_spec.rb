@@ -599,6 +599,32 @@ module Interactor
       end
     end
 
+    describe "object shape" do
+      # All construction paths must assign the same instance variables in the
+      # same order so contexts share one object shape; otherwise @table and
+      # flag reads go polymorphic (slower) under YJIT.
+      it "is identical regardless of state or construction path" do
+        fresh = Context.build(a: 1)
+        failed = Context.build(a: 1)
+        begin
+          failed.fail!
+        rescue
+          nil
+        end
+        halted = Context.build(a: 1)
+        begin
+          halted.halt!
+        rescue
+          nil
+        end
+        duped = fresh.dup
+        loaded = Marshal.load(Marshal.dump(fresh))
+
+        shapes = [fresh, failed, halted, duped, loaded].map(&:instance_variables)
+        expect(shapes.uniq.size).to eq(1)
+      end
+    end
+
     describe "#to_s" do
       it "matches #inspect so attribute info is not lost" do
         context = Context.build(foo: "bar")

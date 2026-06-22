@@ -66,7 +66,12 @@ module Interactor
     end
 
     def initialize(context = {})
+      # Assign every instance variable up front, in a fixed order, so all
+      # contexts share one object shape. fail!/halt!/rollback! then only mutate
+      # existing slots instead of adding ivars, which would fork the shape and
+      # make @table and flag reads polymorphic (slower) under YJIT.
       @table = {}
+      reset_state
       context&.each { |key, value| self[key] = value }
     end
 
@@ -128,6 +133,7 @@ module Interactor
 
     def marshal_load(table)
       @table = table
+      reset_state
       rebuild_accessors
     end
 
@@ -416,10 +422,20 @@ module Interactor
       super
       @table = orig.to_h
       rebuild_accessors
+      reset_state
+      # A copy starts fresh except that it carries over the called interactors,
+      # so it can still be rolled back.
       @called = orig._called.dup
-      @failure = nil
-      @halted = nil
-      @rolled_back = nil
+    end
+
+    # Set the transient state to that of a brand-new context, assigning the
+    # ivars in the order #initialize establishes so every construction path
+    # produces the same object shape.
+    def reset_state
+      @called = []
+      @failure = false
+      @halted = false
+      @rolled_back = false
     end
 
     # Internal: Inherited Object/Kernel methods the context itself calls and
