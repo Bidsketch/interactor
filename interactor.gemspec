@@ -13,7 +13,6 @@ Gem::Specification.new do |spec|
 
   spec.files = `git ls-files`.split($INPUT_RECORD_SEPARATOR)
 
-  spec.add_dependency "ostruct"
   spec.add_development_dependency "bundler"
   spec.add_development_dependency "rake"
 end
