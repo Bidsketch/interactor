@@ -11,6 +11,8 @@ Gem::Specification.new do |spec|
   spec.homepage = "https://github.com/Bidsketch/interactor"
   spec.license = "MIT"
 
+  spec.required_ruby_version = ">= 3.1"
+
   spec.files = `git ls-files`.split($INPUT_RECORD_SEPARATOR)
 
   spec.add_development_dependency "bundler"
